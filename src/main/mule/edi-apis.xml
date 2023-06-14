@@ -1,0 +1,199 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns:os="http://www.mulesoft.org/schema/mule/os" xmlns:email="http://www.mulesoft.org/schema/mule/email" xmlns:db="http://www.mulesoft.org/schema/mule/db" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:apikit="http://www.mulesoft.org/schema/mule/mule-apikit" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd http://www.mulesoft.org/schema/mule/mule-apikit http://www.mulesoft.org/schema/mule/mule-apikit/current/mule-apikit.xsd http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd 
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd
+http://www.mulesoft.org/schema/mule/email http://www.mulesoft.org/schema/mule/email/current/mule-email.xsd
+http://www.mulesoft.org/schema/mule/os http://www.mulesoft.org/schema/mule/os/current/mule-os.xsd">
+	<os:object-store name="Auth_Key" doc:name="Object store" doc:id="571054d0-70ba-4cfb-b405-4d77b206f215" maxEntries="1" entryTtl="24" entryTtlUnit="HOURS" expirationInterval="24" expirationIntervalUnit="HOURS"/>
+	<flow name="SRS-Order-Submit" doc:id="5d55eb2a-b6eb-456d-a86c-2e4299447c24" >
+		
+		<flow-ref doc:name="Flow Reference for Authentication Key" doc:id="e3e68fb2-dd96-4c20-bb62-0596a2c45ba0" name="SRS-Authentication"/>
+		<logger level="INFO" doc:name="Logger" doc:id="2a07dce6-8f6b-431e-9185-c959344f7007" message="#[vars.key]"/>
+		<db:stored-procedure doc:name="Stored procedure Supplier Order List" doc:id="fc08c828-5c0c-4e1c-a958-f4dce634ddf4" config-ref="StepsDevelop">
+			<db:sql ><![CDATA[{
+	CALL procAPISRSOrderList()
+}]]></db:sql>
+		</db:stored-procedure>
+		<logger level="INFO" doc:name="Logger" doc:id="0e79f479-8567-463a-a129-732559b90086" message='#[message.payload.resultSet1[0]."result"]'/>
+		<set-variable value='#[message.payload.resultSet1[0]."result"]' doc:name="Order List JSON" doc:id="0908ce45-d49f-4bee-8f5c-fcba800ea9ab" variableName="orderListJson"/>
+		<choice doc:name="Order List JSON value" doc:id="fd92c129-fa12-4980-ad61-6bec0569a86a" >
+			<when expression="#[vars.orderListJson != null]">
+				<set-variable value='#[read(vars.orderListJson,"application/json").orderList]' doc:name="Order List" doc:id="4de20f48-55bb-4abb-90d0-6ace5d1ead43" variableName="orderList" />
+				<foreach doc:name="For Each" doc:id="a0cc4d0a-2930-44d6-8580-44be6336a121" collection="#[vars.orderList]">
+			<set-variable value="#[payload.json]" doc:name="Order JSON " doc:id="a5c91dbe-6ccd-453f-86c0-427d87601eba" variableName="json" />
+			<set-variable value="#[payload.id]" doc:name="Supplier Order Id" doc:id="e42559f2-d44e-4d7b-97e0-f4929783f4e9" variableName="orderId" />
+			<try doc:name="Try" doc:id="08e67d8f-cac7-4955-addd-e50bea8447ef" >
+						<http:request method="POST" doc:name="Submit Order SRS Request" doc:id="7f1f5425-1817-4ed2-ad50-80dca6c13fc2" config-ref="SRSSubmitOrder" path="/orders/submit">
+				<http:body><![CDATA[#[vars.json]]]></http:body>
+				<http:headers><![CDATA[#[output application/java
+---
+{
+	"Authorization" : vars.key,
+	"Content-Type" : "application/json"
+}]]]></http:headers>
+			</http:request>
+						<logger level="INFO" doc:name="Logger" doc:id="b099bb34-ed3f-4d63-8f66-1187c35191d0" message="#[payload.orderID]"/>
+						<set-variable value='#[%dw 2.0
+output application/json
+---
+{
+	"error": 0,
+	"supplierOrderID": vars.orderId as Number,
+	"referenceID": payload.orderID as Number
+}]' doc:name="Result" doc:id="a340bdb0-867a-437e-a2cd-06c68db9e7c3" variableName="errorJson" />
+						<error-handler >
+							<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="827b1f1a-37fc-434a-b441-98968f2ab62b" type="HTTP:UNAUTHORIZED">
+								<logger level="INFO" doc:name="Logger" doc:id="ba6a5139-ce06-4f8c-9d49-5d1dda721ff7" message='#["Authentication fail : Supplier Order - " ++ vars.orderId]'/>
+								<flow-ref doc:name="Flow Reference for Authentication Key" doc:id="d7914444-ed37-4678-a6e8-5b22f4270a77" name="SRS-Authentication"/>
+								<set-variable value='#[%dw 2.0
+output application/json
+---
+{
+	"error": 1,
+	"supplierOrderID": vars.orderId as Number,
+	"referenceID": null
+}]' doc:name="Error" doc:id="722014a2-8a3a-4645-8a29-b5ee1a81ba3a" variableName="errorJson" />
+							</on-error-continue>
+							<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="98c0550e-6121-48a9-8e95-4fcbd8b5bec3" type="HTTP:BAD_GATEWAY, HTTP:BAD_REQUEST, HTTP:CLIENT_SECURITY, HTTP:CONNECTIVITY, HTTP:FORBIDDEN, HTTP:INTERNAL_SERVER_ERROR, HTTP:METHOD_NOT_ALLOWED, HTTP:NOT_ACCEPTABLE, HTTP:NOT_FOUND, HTTP:PARSING, HTTP:RETRY_EXHAUSTED, HTTP:SECURITY, HTTP:SERVICE_UNAVAILABLE, HTTP:TIMEOUT, HTTP:TOO_MANY_REQUESTS, HTTP:UNSUPPORTED_MEDIA_TYPE, EXPRESSION, STREAM_MAXIMUM_SIZE_EXCEEDED">
+								<set-variable value='#[%dw 2.0
+output application/json
+---
+{
+	"error": 1,
+	"supplierOrderID": vars.orderId as Number,
+	"referenceID": null
+}]' doc:name="Error" doc:id="e9524c4a-0d78-40d5-8e4f-95095b9f603f" variableName="errorJson" />
+							</on-error-continue>
+						</error-handler>
+					</try>
+					<db:stored-procedure doc:name="Update Order Stored procedure" doc:id="43c669d9-f55a-4a93-8fcb-5edec8e50fab" config-ref="StepsDevelop">
+				<db:sql><![CDATA[{
+	CALL procAPISRSUpdateSupplierResponse(:prmJSON)
+
+}]]></db:sql>
+				<db:input-parameters><![CDATA[#[{
+	"prmJSON": write(vars.errorJson, "application/json")
+}]]]></db:input-parameters>
+			</db:stored-procedure>
+		</foreach>
+			</when>
+			<otherwise >
+				<logger level="INFO" doc:name="Logger" doc:id="17757f56-512b-48ac-9b44-c39093000a43" message="Supplier Order List is empty"/>
+			</otherwise>
+		</choice>
+		<error-handler ref="main-error-handler" />
+	</flow>
+	
+	<flow name="SRS-Order-status" doc:id="94b9359b-908b-47ad-a862-da9885f32df3" >
+		
+		<flow-ref doc:name="Flow Reference for Authentication Key" doc:id="22ae4dad-a612-4d87-b800-541140a8cce5" name="SRS-Authentication" />
+		<db:stored-procedure doc:name="Stored procedure Supplier Order List" doc:id="c7c7b446-2b1e-429f-a39b-c94827ec475c" config-ref="StepsDevelop">
+				<db:sql><![CDATA[{
+	CALL procAPISRSOrderListForOrderStatus()
+}]]></db:sql>
+			</db:stored-procedure>
+		<logger level="INFO" doc:name="Logger" doc:id="b9909963-9df3-4962-9d7e-9d272162159d" message='#[message.payload.resultSet1[0]."result"]'/>
+		<set-variable value='#[message.payload.resultSet1[0]."result"]' doc:name="Order List Json" doc:id="4839474b-5a5e-445b-9be4-27d23714e09c" variableName="orderListJson"/>
+		<choice doc:name="Order List JSON value" doc:id="6e006802-06f5-4f30-9b9d-c4f83243b674" >
+			<when expression="#[vars.orderListJson != null]" >
+				<set-variable value='#[read(vars.orderListJson,"application/json").orderList]' doc:name="Order List" doc:id="6f92ad1b-5a8c-43f0-8c1e-1bcaf0cdbb6f" variableName="orderList" />
+				<foreach doc:name="For Each" doc:id="b4dd4907-fa2b-4c40-a38c-2d7b47112022" collection="#[vars.orderList]" >
+					<set-variable value="#[payload.referenceID]" doc:name="Reference ID" doc:id="e5645077-5f0b-4c85-b4ca-ef8654a1099b" variableName="referenceID" />
+					<set-variable value="#[payload.id]" doc:name="Supplier Order Id" doc:id="c3a342ce-9a57-490f-b8a4-5d42466a430b" variableName="orderId" />
+					<try doc:name="Try" doc:id="90a6193e-abd5-4499-a56c-802f30de8afb" >
+						<http:request method="GET" doc:name="SRS Order Detail Request" doc:id="1f883984-bc49-4fc1-882f-ec426ecd9e8c" config-ref="SRSSubmitOrder" url="https://services-dev.roofhub.pro/orders/{orderNumber}">
+							<http:headers ><![CDATA[#[output application/java
+---
+{
+	"Authorization" : vars.key,
+	"Content-Type" : "application/json"
+}]]]></http:headers>
+							<http:uri-params ><![CDATA[#[output application/java
+---
+{
+	"orderNumber" : 29836860
+}]]]></http:uri-params>
+						</http:request>
+						<logger level="INFO" doc:name="Logger" doc:id="bee3406e-e0a8-4bda-8495-dd5869d24608" message="#[payload.orderHeader.orderStatus]" />
+						<set-variable value='#[%dw 2.0
+output application/json
+---
+{
+	"supplierOrderID": vars.orderId as Number,
+	"status": payload.orderHeader.orderStatus as String,
+	"error": 0 
+}]' doc:name="Order Status" doc:id="efddd029-23b1-4e71-9122-39d010027586" variableName="orderStatus" />
+						<error-handler >
+							<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="1ed3565b-19cc-4c4e-b134-6c5e2d9a3361" type="HTTP:UNAUTHORIZED" >
+								<logger level="INFO" doc:name="Logger" doc:id="4236935c-5c77-48f8-9359-5d9d51b7d896" message='#["Authentication fail : Supplier Order - " ++ vars.orderId as String]' />
+								<flow-ref doc:name="Flow Reference for Authentication Key" doc:id="3794ce89-a99e-4c51-9227-9d2e4aebff99" name="SRS-Authentication" />
+								<set-variable value='#[%dw 2.0
+output application/json
+---
+{
+	"supplierOrderID": vars.orderId as Number,
+	"status": null,
+	"error": 1
+}]' doc:name="Error" doc:id="83f36de8-f7b8-4055-a3d5-104d8f4b9b32" variableName="orderStatus" />
+							</on-error-continue>
+							<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="3536f23a-2503-45e9-bfa6-a4b54cf7a6ed" type="HTTP:BAD_GATEWAY, HTTP:BAD_REQUEST, HTTP:CLIENT_SECURITY, HTTP:CONNECTIVITY, HTTP:FORBIDDEN, HTTP:INTERNAL_SERVER_ERROR, HTTP:METHOD_NOT_ALLOWED, HTTP:NOT_ACCEPTABLE, HTTP:NOT_FOUND, HTTP:PARSING, HTTP:RETRY_EXHAUSTED, HTTP:SECURITY, HTTP:SERVICE_UNAVAILABLE, HTTP:TIMEOUT, HTTP:TOO_MANY_REQUESTS, HTTP:UNSUPPORTED_MEDIA_TYPE, EXPRESSION, STREAM_MAXIMUM_SIZE_EXCEEDED" >
+								<set-variable value='#[%dw 2.0
+output application/json
+---
+{
+	"supplierOrderID": vars.orderId as Number,
+	"status": null,
+	"error": 1
+}]' doc:name="Error" doc:id="5603ba4d-26e6-4914-b53e-9ae7301502fd" variableName="orderStatus" />
+							</on-error-continue>
+						</error-handler>
+					</try>
+					<db:stored-procedure doc:name="Update Order Stored procedure" doc:id="d203eb6f-034d-4ac3-af0a-55c6d8adff4b" config-ref="StepsDevelop" >
+						<db:sql ><![CDATA[{
+	CALL procAPISRSUpdateStatusResponse(:prmJSON)
+
+}]]></db:sql>
+						<db:input-parameters ><![CDATA[#["prmJSON": write(vars.orderStatus, "application/json")]]]></db:input-parameters>
+					</db:stored-procedure>
+				</foreach>
+			</when>
+			<otherwise >
+				<logger level="INFO" doc:name="Logger" doc:id="0b296513-7baf-4d14-b1eb-4cb344317b82" message="Supplier Order List is empty" />
+			</otherwise>
+		</choice>
+	</flow>
+	<flow name="SRS-Authentication" doc:id="8677fe93-2407-459b-b3c3-b18cee1b3571" >
+		<try doc:name="Try" doc:id="b2874637-9953-4f2d-bef4-b67c8b58e59f" >
+			<os:retrieve doc:name="Retrieve" doc:id="de7fad7a-980d-431f-8ee2-25cf2d9d3626" key="accessKey" objectStore="Auth_Key" />
+			<set-variable value='#[payload as String]' doc:name="Authentication Key" doc:id="568e9e48-74a0-4bd4-a8d2-a0ccafaa4151" variableName="key" />
+			<logger level="INFO" doc:name="Logger" doc:id="f9fb8866-2d82-4c1f-b938-2b5a69023257" message="#[vars.key]"/>
+			<error-handler >
+				<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="1cadce77-17c4-4823-8018-9f21a83b6b88" type="OS:KEY_NOT_FOUND">
+					<os:clear doc:name="Clear Authentication Key" doc:id="cb296528-bc72-4199-93c3-e46cad9495ec" objectStore="Auth_Key"/>
+					<ee:transform doc:name="Transform Body Parameters to x-www-form" doc:id="e8ea19f3-7a0e-40e1-b75b-da9a302e0ae1" >
+						<ee:message >
+							<ee:set-payload ><![CDATA[%dw 2.0
+
+output application/x-www-form-urlencoded
+---
+{
+	scope:'ALL',
+	client_id:'186c188ce0154704a098263963189d7e',	
+	client_secret:'382226fc73e04a0ba272ceab07dc12f3',
+	grant_type:'client_credentials'
+
+}]]></ee:set-payload>
+						</ee:message>
+					</ee:transform>
+					<http:request method="POST" doc:name="Authentication SRS API Request" doc:id="5cc206df-9394-4e69-88d9-9e4675e1f563" config-ref="SRSSubmitOrder" path="/authentication/token" />
+					<logger level="INFO" doc:name="Logger" doc:id="0caef49d-2c2b-4946-bd81-84be00df797f" message="#[payload.access_token]" />
+					<set-variable value='#["bearer " ++ payload.access_token]' doc:name="Authentication Key" doc:id="e67744dc-41dc-4056-96b1-e815cb4abcad" variableName="key" />
+					<os:store doc:name="Store" doc:id="9f13f183-b851-4247-87aa-2aecbe0f61c4" key="accessKey" objectStore="Auth_Key" >
+						<os:value ><![CDATA[#[vars.key]]]></os:value>
+					</os:store>
+				</on-error-continue>
+			</error-handler>
+		</try>
+		<error-handler ref="main-error-handler" />
+	</flow>
+
+</mule>

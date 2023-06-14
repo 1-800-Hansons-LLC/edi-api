@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:apikit="http://www.mulesoft.org/schema/mule/mule-apikit"
+	xmlns:db="http://www.mulesoft.org/schema/mule/db"
+	xmlns:tls="http://www.mulesoft.org/schema/mule/tls"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd 
+http://www.mulesoft.org/schema/mule/mule-apikit http://www.mulesoft.org/schema/mule/mule-apikit/current/mule-apikit.xsd 
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd 
+http://www.mulesoft.org/schema/mule/tls http://www.mulesoft.org/schema/mule/tls/current/mule-tls.xsd 
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd">
+	
+	<db:config name="StepsDevelop" doc:name="Database Config" doc:id="bd9ee6ac-083b-4188-b22e-f7457f3572a8" >
+		<db:mssql-connection host="10.10.10.221" port="1433" user="MuleData" password="Hansons123#" databaseName="StepsController" />
+	</db:config>
+	<db:config name="Steps" doc:name="Database Config" doc:id="ace0435c-6d2d-4df4-9e3e-0a9229f5dc79" >
+		<db:mssql-connection host="10.10.10.107" port="1433" user="IWeb" password="Han234" databaseName="stepscontroller" />
+	</db:config>
+	<http:request-config name="SRSSubmitOrder" doc:name="HTTP Request configuration" doc:id="af373818-7fb4-4036-b02e-50e2d76ca842" >
+		<http:request-connection protocol="HTTPS" host="services-dev.roofhub.pro" port="443"/>
+	</http:request-config>
+	<http:request-config name="SendEmail" doc:name="HTTP Request configuration" doc:id="20aec24c-2161-494a-9389-2f2099dc3c5a" basePath="/api/" >
+		<http:request-connection protocol="HTTPS" host="send-email-api.us-e2.cloudhub.io" />
+	</http:request-config>
+	
+	<http:listener-config name="Base">
+		<http:listener-connection host="0.0.0.0"
+			port="8082"/>
+	</http:listener-config>
+	<configuration-properties
+		doc:name="Configuration properties"
+		doc:id="31e3610d-9a2c-4c16-a5c6-bf5f60c1f5d5"
+		file="${env}-properties.yaml" />
+	<global-property doc:name="Global Property"
+		doc:id="bcb060d5-c4a4-4972-b7bd-ff8370deb97d" name="env" value="dev" />
+	
+	
+	<flow name="authenticateHeaders" doc:id="c954b19c-59a1-4c0a-b0a3-f2f17726bce0" >
+		<ee:transform doc:name="Transform Message" doc:id="2358c5d5-e214-47dd-b7ff-c010930aee3c" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[p('authentication.' ++ message.attributes.headers.proj ++ '.client_id') == message.attributes.headers.client_id and 
+p('authentication.' ++ message.attributes.headers.proj ++ '.client_secret') == message.attributes.headers.client_secret]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+	<flow name="injectCorsHeaders" doc:id="39b8e6dd-c5e7-4f4d-b13e-563c4ffe5b1d" >
+		<ee:transform doc:name="Transform Message" doc:id="cc8ca217-3de6-4d3a-8647-69612131638c" >
+			<ee:message />
+			<ee:variables >
+				<ee:set-variable variableName="outboundHeaders" ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	("access-control-allow-headers": message.attributes.headers."access-control-request-headers") if(message.attributes.headers."access-control-request-headers"?),
+	("access-control-allow-methods": message.attributes.headers."access-control-request-method") if(message.attributes.headers."access-control-request-method"?),
+	("access-control-allow-origin": "*") if(message.attributes.headers.origin?)
+}]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+	</flow>
+	 
+	</mule>

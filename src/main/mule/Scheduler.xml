@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd">
+	<flow doc:id="b3b41ba4-738e-4313-a433-92266b2d1ff7" initialState="started" name="SRS-Order-Submit-Schedule">
+		<scheduler doc:name="15 min" doc:id="28780639-b317-4ac1-aeb9-f5f6403ac386" >
+			<scheduling-strategy >
+				<fixed-frequency frequency="30" timeUnit="MINUTES"/>
+			</scheduling-strategy>
+		</scheduler>
+		<flow-ref doc:name="SRS-Order-Submit" doc:id="7cdf1d22-dbcb-47b4-85d0-cf0a2c7599e4" name="SRS-Order-Submit" />
+		<error-handler ref="main-error-handler" />
+	</flow>
+	<flow name="SRS-Order-Status" doc:id="0b8827eb-528d-4dea-9bd9-24c1a7b8428c" initialState="stopped" >
+		<scheduler doc:name="15 min" doc:id="3e4d9d8f-eb38-4b89-aa2d-d19d38123a1e" >
+			<scheduling-strategy >
+				<fixed-frequency frequency="15" timeUnit="MINUTES"/>
+			</scheduling-strategy>
+		</scheduler>
+		<flow-ref doc:name="SRS-Order-Status" doc:id="28eae4fe-8182-426f-a8ce-8af93bba7b20" name="SRS-Order-status" />
+	</flow>
+</mule>

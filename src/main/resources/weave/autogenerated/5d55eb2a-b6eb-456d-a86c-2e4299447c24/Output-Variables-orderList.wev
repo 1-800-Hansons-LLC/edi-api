@@ -1,0 +1,4 @@
+%dw 2.0
+
+type auto_5d55eb2a_b6eb_456d_a86c_2e4299447c24_Output_Variables_orderList = Any
+
